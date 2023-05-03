@@ -1,6 +1,7 @@
 import { combineReducers, createStore } from "redux"
+import { IStore } from "./type"
 
-export const rootReducer = combineReducers({
+export const rootReducer = combineReducers<IStore>({
 
 })
 

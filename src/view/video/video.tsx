@@ -1,4 +1,4 @@
-import { Socket, io } from 'socket.io-client'
+import { io } from 'socket.io-client'
 import { useEffect } from "react"
 
 const socket = io('http://localhost:3001/', {
@@ -16,11 +16,11 @@ export const Video = () => {
                 candidate: e.candidate,
                 user,
             })
-
+        
         navigator.mediaDevices
             .getUserMedia({
                 audio: true,
-                video: false,
+                video: true,
             })
             .then((localStream) => {
                 const video = document.createElement('video')

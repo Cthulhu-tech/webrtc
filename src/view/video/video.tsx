@@ -10,11 +10,22 @@ export const Video = () => {
     const socket = useContext(SocketContext)
     const leaveHandler = () => navigate('/')
 
-    const { mediaData } = useWEBRTC(socket)
+    const { peerConnections, videoState } = useWEBRTC(socket)
 
     return <>
     <div className='video'>
-        {Object.values(mediaData).map((_) => <video key={_} src={_} autoPlay/>)}
+        <div>
+        {Object.values(peerConnections.current)?.map((_) => 
+            <video
+                key={_.remoteDescription?.sdp}
+                ref={
+                    (instace) => {
+                        videoState(instace, _)
+                    }
+                }
+                autoPlay
+            />)}
+        </div>
     </div>
     <button onClick={leaveHandler}>leave room</button>
     </>

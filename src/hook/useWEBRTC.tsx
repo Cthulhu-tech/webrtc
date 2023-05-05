@@ -1,16 +1,18 @@
 import { RECEIVE_ANSWER, RECEIVE_CLIENT_JOINED, RECEIVE_OFFER, RECEIVE_ICE_CANDIDATE, RECEIVE_DISONECT } from "./type"
-import { useCallback, useEffect, useRef } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { Socket } from "socket.io-client"
 
 export const useWEBRTC = (socket: Socket) => {
 
-    const mediaData = useRef<{ [key:string]: MediaStream }>({})
-    const dataChannels= useRef<{ [key:string]: RTCDataChannel }>({})
+    const dataChannels = useRef<{ [key:string]: RTCDataChannel }>({})
     const peerConnections = useRef<{ [key:string]: RTCPeerConnection }>({})
+
+    const [connection, setConnection] = useState(peerConnections.current)
 
     const createVideoStream = useCallback( async (peerConnection: RTCPeerConnection) => {
         const contains = await navigator.mediaDevices.enumerateDevices()
         .then(devices => {
+            setConnection({...peerConnections.current})
             const cams = devices.filter(device => device.kind === "videoinput")
             const constraints = { video: {}, audio: true }
             if(cams.length > 0)
@@ -35,10 +37,7 @@ export const useWEBRTC = (socket: Socket) => {
         await navigator.mediaDevices
             .getUserMedia(contains)
                 .then((stream) => {
-                    stream.getTracks().forEach(track => {
-                        console.log(track)
-                        peerConnection.addTrack(track, stream)
-                    })
+                    stream.getTracks().forEach(track => peerConnection.addTrack(track, stream))
                 }).catch((error) => {
                     switch(error.message) {
                         case 'Requested device not found':
@@ -50,7 +49,6 @@ export const useWEBRTC = (socket: Socket) => {
     const createRTC = (user: string) => {
         const peerConnection = new RTCPeerConnection(undefined)
         createVideoStream(peerConnection)
-        peerConnection.ontrack = ({streams: [remoteStream]}) => mediaData.current[user] = remoteStream
         peerConnection.onicecandidate = (e) => 
             socket.emit('SEND_ICE_CANDIDATE', {
                 candidate: e.candidate,
@@ -66,8 +64,7 @@ export const useWEBRTC = (socket: Socket) => {
             const peerConnection = createRTC(user_server_id)
             const dataChannel = peerConnection.createDataChannel(user_server_id)
             dataChannel.onmessage = e => console.log(e.data)
-            dataChannel.onopen = () => dataChannel.send('message')
-
+            dataChannel.onopen = () => dataChannel.send('Connection open!')
             dataChannels.current[user_server_id] = dataChannel
             peerConnection.createOffer({
                 offerToReceiveVideo: false,
@@ -94,10 +91,9 @@ export const useWEBRTC = (socket: Socket) => {
                     user
                 })
             })
-
             peerConnection.ondatachannel = (e) => {
                 const dataChannel = e.channel
-                dataChannel.onopen = () => dataChannel.send('message')
+                dataChannel.onopen = () => dataChannel.send('Connection open!')
                 dataChannel.onmessage = e => console.log(e.data)
                 dataChannels.current[user] = dataChannel
             }
@@ -109,7 +105,6 @@ export const useWEBRTC = (socket: Socket) => {
         socket.on('RECEIVE_ICE_CANDIDATE', ({ candidate, user }: RECEIVE_ICE_CANDIDATE) => peerConnections.current[user].addIceCandidate(candidate))
         // данные отключения
         socket.on('RECEIVE_DISONECT', ({ user }: RECEIVE_DISONECT) => {
-            document.querySelector(`[data-user*=${user}]`)?.remove()
             if(peerConnections.current[user]) peerConnections.current[user].close()
             delete dataChannels.current[user]
             delete peerConnections.current[user]
@@ -125,5 +120,11 @@ export const useWEBRTC = (socket: Socket) => {
         }
     },[socket])
 
-    return { mediaData }
+    const videoState = useCallback((instace: HTMLVideoElement | null, _: RTCPeerConnection) => {
+        _.ontrack = ({streams: [remoteStream]}) => {
+            if(instace?.srcObject) instace.srcObject = remoteStream
+        }
+    }, [])
+
+    return { peerConnections, videoState }
 }

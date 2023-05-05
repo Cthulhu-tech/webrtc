@@ -11,6 +11,7 @@ let peerConnections: { [key:string]: RTCPeerConnection } = {}
 export const Video = () => {
 
     const createRTC = (user: string) => {
+        const videoContainer = document.querySelector('.video')
         const peerConnection = new RTCPeerConnection(undefined)
         peerConnection.onicecandidate = (e) => 
             socket.emit('SEND_ICE_CANDIDATE', {
@@ -22,7 +23,6 @@ export const Video = () => {
             audio: true,
         }).then((stream) => {
             stream.getTracks().forEach(track => {
-                const videoContainer = document.querySelector('.video')
                 const video = document.createElement('video')
                 video.autoplay = true
                 video.id = user
@@ -31,6 +31,14 @@ export const Video = () => {
                 peerConnection.addTrack(track, stream)
             })
         })
+        peerConnection.ontrack = (event) => {
+            const video = document.createElement('video')
+            video.autoplay = true
+            video.id = user
+            const [remoteStream] = event.streams
+            video.srcObject = remoteStream
+            videoContainer?.append(video)
+        }
         return peerConnection
     }
 
@@ -40,13 +48,8 @@ export const Video = () => {
         socket.on('RECEIVE_CLIENT_JOINED', ({ user_server_id }) => {
             const peerConnection = createRTC(user_server_id)
             const dataChannel = peerConnection.createDataChannel(user_server_id)
-
-            dataChannel.addEventListener('message', event => console.log(event.data))
-
-            dataChannel.onopen = () => {
-                dataChannel.send('message')
-            }
-            
+            dataChannel.onmessage = e => console.log(e.data)
+            dataChannel.onopen = () => dataChannel.send('message')
             dataChannels[user_server_id] = dataChannel
 
             peerConnection.createOffer({
@@ -66,17 +69,6 @@ export const Video = () => {
         socket.on('RECEIVE_OFFER', ({ offer, user }) => {
             const peerConnection = createRTC(user)
             peerConnection.setRemoteDescription(offer)
-
-            peerConnection.ontrack = (event) => {
-                const videoContainer = document.querySelector('.video')
-                const video = document.createElement('video')
-                const [remoteStream] = event.streams
-                video.autoplay = true
-                video.id = user
-                video.srcObject = remoteStream
-                videoContainer?.append(video)
-            }
-
             peerConnection.createAnswer()
             .then((answer) => {
                 peerConnection.setLocalDescription(answer)
@@ -88,10 +80,8 @@ export const Video = () => {
 
             peerConnection.ondatachannel = (e) => {
                 const dataChannel = e.channel
-    
-                dataChannel.onmessage = (message) => {
-                    console.log(message.data)
-                }
+                dataChannel.onopen = () => dataChannel.send('message')
+                dataChannel.onmessage = e => console.log(e.data)
                 dataChannels[user] = dataChannel
             }
 

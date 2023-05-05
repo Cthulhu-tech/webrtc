@@ -14,9 +14,7 @@ export const Video = () => {
 
     return <>
     <div className='video'>
-        {Object.values(mediaData).map((_) => {
-            return <video key={_} src={_} autoPlay/>
-        })}
+        {Object.values(mediaData).map((_) => <video key={_} src={_} autoPlay/>)}
     </div>
     <button onClick={leaveHandler}>leave room</button>
     </>

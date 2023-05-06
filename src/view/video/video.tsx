@@ -15,14 +15,10 @@ export const Video = () => {
     return <>
     <div className='video'>
         <div>
-        {Object.values(peerConnections.current)?.map((_) => 
+        {Object.values(peerConnections.current)?.map((_, i) => 
             <video
-                key={_.remoteDescription?.sdp}
-                ref={
-                    (instace) => {
-                        videoState(instace, _)
-                    }
-                }
+                key={i}
+                ref={(instace) => videoState(instace, _)}
                 autoPlay
             />)}
         </div>

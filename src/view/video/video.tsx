@@ -2,7 +2,7 @@ import { SocketContext } from "../../context/socketProvider"
 import { useNavigate } from "react-router-dom"
 import { useContext } from "react"
 
-import { useWEBRTC } from '../../hook/useWEBRTC'
+import { useMeshRTC } from '../../hook/meshRTC'
 
 export const Video = () => {
 
@@ -10,18 +10,15 @@ export const Video = () => {
     const socket = useContext(SocketContext)
     const leaveHandler = () => navigate('/')
 
-    const { peerConnections, videoState } = useWEBRTC(socket)
-
+    const { connection, videoView } = useMeshRTC(socket)
     return <>
     <div className='video'>
-        <div>
-        {Object.values(peerConnections.current)?.map((_, i) => 
-            <video
-                key={i}
-                ref={(instace) => videoState(instace, _)}
-                autoPlay
-            />)}
-        </div>
+        {Object.entries(connection).map((connectArray) => {
+            return <video 
+                    key={connectArray[0]}
+                    ref={reference => reference && videoView(connectArray[1], reference)}
+                ></video>
+        })}
     </div>
     <button onClick={leaveHandler}>leave room</button>
     </>

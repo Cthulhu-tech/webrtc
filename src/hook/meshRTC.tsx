@@ -1,86 +1,89 @@
 import { RECEIVE_ANSWER, RECEIVE_CLIENT_JOINED, RECEIVE_OFFER, RECEIVE_ICE_CANDIDATE, RECEIVE_DISONECT } from "./type"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { Socket } from "socket.io-client"
 
+let constraints = {
+    video: false,
+    audio: true
+}
+
+const offerOptions = {
+    offerToReceiveVideo: false,
+    offerToReceiveAudio: true
+}
+
+const peerConnections: { [key:string]: RTCPeerConnection } = {}
+
 export const useMeshRTC = (socket: Socket) => {
+    const [conection, setPeerConnections] = useState<{ [key:string]: RTCPeerConnection }>({})
 
-    const dataChannels = useRef<{ [key:string]: RTCDataChannel }>({})
-    const peerConnections = useRef<{ [key:string]: RTCPeerConnection }>({})
-    const [connection, setConnection] = useState<{ [key:string]: RTCPeerConnection }>({})
-
-    const getStream = async () => {
+    const getStream = async (peerConnection: RTCPeerConnection) => {
+        const streams = await navigator.mediaDevices.getUserMedia(constraints)
+        await Promise.all(streams.getTracks().map(track => peerConnection.addTrack(track, streams)))
+    }
+    const initiateSignaling = async ( peerConnection: RTCPeerConnection, user: string) => {
+        await peerConnection.createOffer(offerOptions)
+        .then(async (offer) => {
+                await peerConnection.setLocalDescription(offer)
+                console.log('send offer to ' + user)
+                socket.emit('SEND_OFFER', { offer, user })
+            },
+            err => {
+                if (err) throw err
+            })
+    }
+    const createRTC = async (user: string) => {
         const peerConnection = new RTCPeerConnection()
-        const streams = await navigator.mediaDevices.getUserMedia({
-            video: false,
-            audio: true,
+        peerConnections[user] = peerConnection
+        setPeerConnections((prevState) => {
+            return {...prevState, peerConnection}
         })
-        streams.getTracks().forEach(track => peerConnection.addTrack(track, streams))
-        // получить кандидатов
-        socket.on('RECEIVE_ICE_CANDIDATE', ({ candidate, user }: RECEIVE_ICE_CANDIDATE) => peerConnections.current[user].addIceCandidate(new RTCIceCandidate(candidate)))
-        // получить данные на отправку к подключению
-        socket.on('RECEIVE_ANSWER', ({ answer, user }: RECEIVE_ANSWER) => peerConnections.current[user].setRemoteDescription(new RTCSessionDescription(answer)))
-        // получить данные отключения
-        socket.on('RECEIVE_DISONECT', ({ user }: RECEIVE_DISONECT) => {
-            if(peerConnections.current[user]) peerConnections.current[user].close()
-            delete dataChannels.current[user]
-            delete peerConnections.current[user]
-        })
+        await getStream(peerConnection)
+        peerConnection.onicecandidate = ({ candidate }) => {
+            if (candidate) {
+                console.log('send ice candidate to ' + user)
+                socket.emit('SEND_ICE_CANDIDATE', { candidate, user })
+            }
+        }
         return peerConnection
     }
-
+    const sendAnswer = async (offer: RTCSessionDescriptionInit, peerConnection: RTCPeerConnection, user: string) => {
+        await peerConnection.setRemoteDescription(offer)
+        peerConnection.createAnswer()
+            .then(async (answer) => {
+                await peerConnection.setLocalDescription(answer)
+                console.log('send answer to ' + user)
+                socket.emit('SEND_ANSWER', { answer, user })
+            }, (err) => {
+                if (err) throw err;
+            })
+    }
     useEffect(() => {
-
         socket.emit('JOIN_ROOM', { room_id: 8 })
-
         socket.on('RECEIVE_CLIENT_JOINED', async ({ user_server_id }: RECEIVE_CLIENT_JOINED) => {
-            const peerConnection = await getStream()
-            peerConnection.onicecandidate = (e) => 
-                socket.emit('SEND_ICE_CANDIDATE', {
-                    candidate: e.candidate,
-                    user: user_server_id,
-                })
-            const dataChannel = peerConnection.createDataChannel(user_server_id)
-            // message handler
-            dataChannel.onmessage = e => console.log(e.data)
-            // open connection handler
-            dataChannel.onopen = () => dataChannel.send('Connection open!')
-            //set data
-            peerConnections.current[user_server_id] = peerConnection
-            dataChannels.current[user_server_id] = dataChannel
-            setConnection({...peerConnections.current})
-            // create offer
-            const offer = await peerConnection.createOffer()
-            await peerConnection.setLocalDescription(offer)
-            socket.emit('SEND_OFFER', {
-                offer,
-                user: user_server_id,
-            })
+            const peerConnection = await createRTC(user_server_id)
+            await initiateSignaling(peerConnection, user_server_id)
         })
-
         socket.on('RECEIVE_OFFER', async ({ offer, user }: RECEIVE_OFFER) => {
-            const peerConnection = await getStream()
-            peerConnection.onicecandidate = (e) =>
-                socket.emit('SEND_ICE_CANDIDATE', {
-                    candidate: e.candidate,
-                    user,
-                })
-            // set remote description
-            await peerConnection.setRemoteDescription(new RTCSessionDescription(offer))
-            // create answer
-            const answer = await peerConnection.createAnswer()
-            await peerConnection.setLocalDescription(answer)
-            peerConnections.current[user] = peerConnection
-            setConnection({...peerConnections.current})
-            socket.emit('SEND_ANSWER', {
-                answer,
-                user
-            })
-            peerConnection.ondatachannel = (e) => {
-                const dataChannel = e.channel
-                dataChannel.onopen = () => dataChannel.send('Connection open!')
-                dataChannel.onmessage = e => console.log(e.data)
-                dataChannels.current[user] = dataChannel
-            }
+            console.log('receive offer from ' + user)
+            const peerConnection = await createRTC(user)
+            sendAnswer(offer, peerConnection, user)
+        })
+        // получить данные на отправку к подключению
+        socket.on('RECEIVE_ANSWER', ({ answer, user }: RECEIVE_ANSWER) => {
+            console.log('receive answer from ' + user)
+            peerConnections[user].setRemoteDescription(answer)
+        })
+        // получить кандидатов
+        socket.on('RECEIVE_ICE_CANDIDATE', ({ candidate, user }: RECEIVE_ICE_CANDIDATE) => {
+            console.log('receive ice candidate from ' + user)
+            console.log(candidate,  peerConnections, user)
+            peerConnections[user].addIceCandidate(candidate)
+        })
+        // получить данные отключения
+        socket.on('RECEIVE_DISONECT', ({ user }: RECEIVE_DISONECT) => {
+            console.log('client leave ('+user+')')
+            delete peerConnections[user]
         })
         return () => {
             socket.close()
@@ -93,11 +96,12 @@ export const useMeshRTC = (socket: Socket) => {
     }, [socket])
 
     const videoView = useCallback((connection: RTCPeerConnection, entity: HTMLVideoElement) => {
-        connection.ontrack = e =>{
+        connection.ontrack = e => {
+            console.log(e)
             entity.autoplay = true
             entity.srcObject = e.streams[0]
         }
     }, [])
 
-    return { connection, videoView }
+    return { conection, videoView }
 }

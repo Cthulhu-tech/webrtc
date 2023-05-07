@@ -11,7 +11,7 @@ export const useMeshRTC = (socket: Socket) => {
     const getStream = async () => {
         const peerConnection = new RTCPeerConnection()
         const streams = await navigator.mediaDevices.getUserMedia({
-            video: false,
+            video: true,
             audio: true,
         })
         streams.getTracks().forEach(track => peerConnection.addTrack(track, streams))

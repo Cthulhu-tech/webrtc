@@ -1,11 +1,12 @@
 import { RECEIVE_ANSWER, RECEIVE_CLIENT_JOINED, RECEIVE_OFFER, RECEIVE_ICE_CANDIDATE, RECEIVE_DISONECT } from "./type"
-import { useEffect, useRef } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { Socket } from "socket.io-client"
 
-export const meshRTC = (socket: Socket) => {
+export const useMeshRTC = (socket: Socket) => {
 
     const dataChannels = useRef<{ [key:string]: RTCDataChannel }>({})
     const peerConnections = useRef<{ [key:string]: RTCPeerConnection }>({})
+    const [connection, setConnection] = useState<{ [key:string]: RTCPeerConnection }>({})
 
     const getStream = async () => {
         const peerConnection = new RTCPeerConnection()
@@ -46,6 +47,7 @@ export const meshRTC = (socket: Socket) => {
             //set data
             peerConnections.current[user_server_id] = peerConnection
             dataChannels.current[user_server_id] = dataChannel
+            setConnection({...peerConnections.current})
             // create offer
             const offer = await peerConnection.createOffer()
             await peerConnection.setLocalDescription(offer)
@@ -68,6 +70,7 @@ export const meshRTC = (socket: Socket) => {
             const answer = await peerConnection.createAnswer()
             await peerConnection.setLocalDescription(answer)
             peerConnections.current[user] = peerConnection
+            setConnection({...peerConnections.current})
             socket.emit('SEND_ANSWER', {
                 answer,
                 user
@@ -88,4 +91,13 @@ export const meshRTC = (socket: Socket) => {
             socket.off('RECEIVE_ICE_CANDIDATE')
         }
     }, [socket])
+
+    const videoView = useCallback((connection: RTCPeerConnection, entity: HTMLVideoElement) => {
+        connection.ontrack = e =>{
+            entity.autoplay = true
+            entity.srcObject = e.streams[0]
+        }
+    }, [])
+
+    return { connection, videoView }
 }

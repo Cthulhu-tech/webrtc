@@ -7,7 +7,7 @@ export const useWEBRTC = (socket: Socket) => {
     const dataChannels = useRef<{ [key:string]: RTCDataChannel }>({})
     const peerConnections = useRef<{ [key:string]: RTCPeerConnection }>({})
 
-    const [connection, setConnection] = useState(peerConnections.current)
+    const [, setConnection] = useState(peerConnections.current)
 
     const createVideoStream = useCallback( async (peerConnection: RTCPeerConnection) => {
         const contains = await navigator.mediaDevices.enumerateDevices()
@@ -46,18 +46,18 @@ export const useWEBRTC = (socket: Socket) => {
                 })
     }, [])
 
-    const createRTC = (user: string) => {
-        const peerConnection = new RTCPeerConnection(undefined)
-        createVideoStream(peerConnection)
-        peerConnection.onicecandidate = (e) => 
-            socket.emit('SEND_ICE_CANDIDATE', {
-                candidate: e.candidate,
-                user,
-            })
-        return peerConnection
-    }
-
     useEffect(() => {
+        const createRTC = (user: string) => {
+            const peerConnection = new RTCPeerConnection()
+            createVideoStream(peerConnection)
+            peerConnection.onicecandidate = (e) => 
+                socket.emit('SEND_ICE_CANDIDATE', {
+                    candidate: e.candidate,
+                    user,
+                })
+            return peerConnection
+        }
+
         socket.emit('JOIN_ROOM', { room_id: 8 })
         // клиент зашёл
         socket.on('RECEIVE_CLIENT_JOINED', ({ user_server_id }: RECEIVE_CLIENT_JOINED) => {
@@ -118,12 +118,13 @@ export const useWEBRTC = (socket: Socket) => {
             socket.off('RECEIVE_ICE_CANDIDATE')
             socket.off('RECEIVE_DISONECT')
         }
-    },[socket])
+    },[socket, createVideoStream])
 
     const videoState = useCallback((instace: HTMLVideoElement | null, _: RTCPeerConnection) => {
-        _.ontrack = ({streams: [remoteStream]}) => {
-            if(instace?.srcObject) instace.srcObject = remoteStream
-        }
+        _.addEventListener('track', async (event) => {
+            const [remoteStream] = event.streams
+            if(instace) instace.srcObject = remoteStream
+        });
     }, [])
 
     return { peerConnections, videoState }

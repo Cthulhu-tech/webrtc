@@ -3,12 +3,12 @@ import { useCallback, useEffect, useState } from "react"
 import { Socket } from "socket.io-client"
 
 let constraints = {
-    video: false,
+    video: true,
     audio: true
 }
 
 const offerOptions = {
-    offerToReceiveVideo: false,
+    offerToReceiveVideo: true,
     offerToReceiveAudio: true
 }
 
@@ -103,5 +103,5 @@ export const useMeshRTC = (socket: Socket) => {
         }
     }, [])
 
-    return { conection, videoView }
+    return { peerConnections, videoView }
 }

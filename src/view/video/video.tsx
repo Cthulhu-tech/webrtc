@@ -10,10 +10,10 @@ export const Video = () => {
     const socket = useContext(SocketContext)
     const leaveHandler = () => navigate('/')
 
-    const { conection, videoView } = useMeshRTC(socket)
+    const { peerConnections, videoView } = useMeshRTC(socket)
     return <>
     <div className='video'>
-        {Object.entries(conection).map((connectArray) => {
+        {Object.entries(peerConnections).map((connectArray) => {
             return <video 
                     key={connectArray[0]}
                     ref={reference => reference && videoView(connectArray[1], reference)}
@@ -22,6 +22,4 @@ export const Video = () => {
     </div>
     <button onClick={leaveHandler}>leave room</button>
     </>
-    
-
 }
